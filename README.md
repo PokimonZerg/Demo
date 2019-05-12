@@ -15,7 +15,7 @@ target.path=/home/centos
 # Параметры подключения к БД
 # Используется H2, чтобы ничего не настраивать
 # По умолчанию БД будет создана в рабочем каталоге с именем demo-db
-spring.datasource.url=jdbc:h2:./demo-db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+spring.datasource.url=jdbc:h2:./demo-db
 spring.datasource.username=sa
 spring.datasource.password=
 ```
