@@ -1,8 +1,8 @@
 package ru.newdv.demo.batch;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersValidator;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
@@ -13,6 +13,7 @@ import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.skip.AlwaysSkipItemSkipPolicy;
 import org.springframework.batch.core.step.skip.SkipPolicy;
+import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
@@ -22,6 +23,7 @@ import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.FieldSetMapper;
+import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -30,13 +32,17 @@ import org.springframework.core.io.FileSystemResource;
 import ru.newdv.demo.data.SourceLineData;
 import ru.newdv.demo.data.SourceLineRepository;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static ru.newdv.demo.batch.SourceLine.SOURCE_LINE_BEAN_NAME;
 
+@Slf4j
 @Configuration
 @EnableBatchProcessing
 public class BatchProcessingConfiguration {
-
-    private static final Logger logger = LoggerFactory.getLogger(BatchProcessingConfiguration.class);
 
     @Autowired
     private JobBuilderFactory jobBuilderFactory;
@@ -46,19 +52,20 @@ public class BatchProcessingConfiguration {
     private BatchProcessingListener listener;
 
     @Bean
-    public Job job(Step step) {
+    public Job job(Step loadLinesStep) {
         return jobBuilderFactory.get("sourceLineJob")
                 .listener(listener)
                 .validator(jobParametersValidator())
                 .incrementer(new RunIdIncrementer())
-                .flow(step)
+                .flow(loadLinesStep)
+                .next(moveFileStep())
                 .end()
                 .build();
     }
 
     @Bean
-    public Step step(ItemWriter<SourceLineData> writer, ItemReader<SourceLine> reader) {
-        return stepBuilderFactory.get("step")
+    public Step loadLinesStep(ItemWriter<SourceLineData> writer, ItemReader<SourceLine> reader) {
+        return stepBuilderFactory.get("loadLinesStep")
                 .listener(listener)
                 .<SourceLine, SourceLineData> chunk(10)
                 .faultTolerant()
@@ -66,6 +73,21 @@ public class BatchProcessingConfiguration {
                 .reader(reader)
                 .processor(processor())
                 .writer(writer)
+                .build();
+    }
+
+    @Bean
+    public Step moveFileStep() {
+        return stepBuilderFactory.get("moveFileStep")
+                .tasklet((contribution, chunkContext) -> {
+                    JobParameters jobParameters = chunkContext.getStepContext().getStepExecution().getJobParameters();
+                    String sourcePath = jobParameters.getString("source.path");
+                    String targetPath = jobParameters.getString("target.path");
+                    log.info("Moving source file '{}' to the target path '{}'", sourcePath, targetPath);
+                    Path sourceFile = Paths.get(sourcePath);
+                    Files.move(sourceFile, Paths.get(targetPath).resolve(sourceFile.getFileName()), REPLACE_EXISTING);
+                    return RepeatStatus.FINISHED;
+                })
                 .build();
     }
 
@@ -79,7 +101,7 @@ public class BatchProcessingConfiguration {
             @Override
             public boolean shouldSkip(Throwable t, int skipCount) {
                 if (t instanceof FlatFileParseException) {
-                    logger.error("Line skipped", t);
+                    log.error("Line skipped", t);
                     return true;
                 }
                 return false;

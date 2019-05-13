@@ -1,7 +1,6 @@
 package ru.newdv.demo.batch;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.stereotype.Component;
@@ -10,9 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @JobScope
+@Slf4j
 public class BatchProcessingListener implements ItemReadListener<SourceLine>, StepExecutionListener, JobExecutionListener {
-
-    private static final Logger logger = LoggerFactory.getLogger(BatchProcessingListener.class);
 
     private AtomicInteger processedCount = new AtomicInteger();
     private AtomicInteger skippedCount =  new AtomicInteger();
@@ -23,7 +21,7 @@ public class BatchProcessingListener implements ItemReadListener<SourceLine>, St
 
     @Override
     public void afterRead(SourceLine item) {
-        logger.info("Process line: {}", item);
+        log.info("Process line: {}", item);
     }
 
     @Override
@@ -47,7 +45,7 @@ public class BatchProcessingListener implements ItemReadListener<SourceLine>, St
 
     @Override
     public void afterJob(JobExecution jobExecution) {
-        logger.info("Uploading complete. Total lines: {}, processed {}, skipped {}",
+        log.info("Uploading complete. Total lines: {}, processed {}, skipped {}",
                 processedCount.get() + skippedCount.get(), processedCount.get(), skippedCount.get());
     }
 }
